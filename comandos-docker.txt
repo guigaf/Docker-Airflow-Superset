@@ -1,0 +1,83 @@
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++ Comandos úteis para o Docker (dockerfile) +++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
++ Criar uma imagem do Docker
+$ docker build -t python-test .
+
++ Executar a imagem do Docker
+$ docker run python-test
+
++ Listar suas imagens.
+$ docker image ls
+
++ Excluir uma imagem específica.
+$ docker image rm [nome da imagem]
+
++ Excluir todas as imagens existentes.
+$ docker image rm $(docker images -a -q)
+
++ Listar todos os contêineres existentes (em execução ou não).
+$ docker ps -a
+
++ Parar um contêiner específico.
+$ docker stop [nome do contêiner]
+
++ Parar todos os contêineres em execução.
+$ docker stop $(docker ps -a -q)
+
++ Excluir um contêiner específico (que não estiver em execução).
+$ docker rm [nome do contêiner]
+
++ Excluir todos os contêineres (apenas se estiverem parados).
+$ docker rm $(docker ps -a -q)
+
++ Exibir os logs (registros) de um contêiner.
+$ docker logs [nome do contêiner]
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++ Comandos úteis para o Docker (docker-compose) +++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
++ Cria todas as iamgens do Docker-Compose
+$ docker-compose build
+
++ Executa todas as iamgens do Docker-Compose
+$ docker-compose up
+
++ Para os contêiners e remove contêiners, images… criados pelo docker-compose up.
+$ docker-compose down
+
++ Mostra log de saida dos servicos (examplo: docker-compose logs -f client).
+$ docker-compose logs -f [service name]
+
++ Lista os contêiners.
+$ docker-compose ps
+
++ Executa o comando em um contêiner que esteja rodando (examplo: docker-compose exec server ls).
+$ docker-compose exec [service name][command]
+
++ Lists images.
+$ docker-compose images
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++ Problemas ao reiniciar a maquina que roda o docker ++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
++ Apòs reiniciar uma maquina que và usar Python (Airflow), è necessario seguir alguns passos.
+1 - export PYTHONPATH=/opt/airflow/common_modules:$PYTHONPATH
+2 - cd .. - Atè a pasta home
+3 - chmod -R 777 *
+4 - Voltar a pasta onde estava antes (pasta anterior a do airflow)
+5 - docker-compose up -d
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++ Comando para limpar o CACHE de um linux ++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
++ Comando para executar via linha de comando no linux
+$ sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

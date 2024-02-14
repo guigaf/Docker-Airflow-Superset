@@ -1,0 +1,263 @@
+version: '3'
+x-airflow-common: &x-airflow-common
+  environment:
+    - LOAD_EX=n
+    - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+    - AIRFLOW__LOGGING__MAX_LOG_DAYS=15
+    - AIRFLOW__LOGGING__DELETE_LOCAL_LOGS=True
+    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:admin@airflow_postgres/airflow_db
+    - AIRFLOW__CORE__PARALLELISM=5
+    - AIRFLOW__CORE__DAG_CONCURRENCY=5
+    - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=1
+    - AIRFLOW__CORE__TEST_CONNECTION=Enabled
+    - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://admin:admin@airflow_postgres/airflow_db
+    - AIRFLOW__CELERY__BROKER_URL=redis://:admin@redis:6379/0
+    - AIRFLOW__WEBSERVER__SECRET_KEY=admin
+    - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    - AIRFLOW__CORE__FERNET_KEY=IYKIlOJwcyUdZnLMG3rDdmFQF5QkI-lgT2P8dRx5IOo=
+    - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - AIRFLOW__API__AUTH_BACKEND=airflow.api.auth.backend.basic_auth
+    - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=5
+    - AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=20
+    - _PIP_ADDITIONAL_REQUIREMENTS=${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    - PYTHONPATH=/opt/airflow/common_modules:$PYTHONPATH
+  volumes:
+    - ./airflow/common:/opt/airflow/common_modules
+    - ./airflow/deactivated_dags:/opt/airflow/deactivated_dags
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/config:/opt/airflow/config
+    - ./files:/files
+    - ./internal_files:/internal_files
+
+x-superset-image: &superset-image apachesuperset.docker.scarf.sh/apache/superset:${TAG:-3.1.0}
+x-superset-depends-on: &superset-depends-on
+  - superset_postgres
+  - redis
+x-superset-volumes:
+  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
+  - ./docker:/app/docker
+  - superset_home:/app/superset_home
+
+services:
+###########################################################################################################################################################################################
+### REDIS - UTILIZADO PELO AIRFLOW E PELO SUPERSET
+  redis:
+    container_name: redis
+    image: redis:7.2
+    restart: always
+    ports:
+      - '6381:6379'
+    command: redis-server --requirepass ps_admin
+    networks:
+      - network
+
+###########################################################################################################################################################################################
+### BANCO DE DADOS DO AIRFLOW
+  airflow_postgres:
+    container_name: airflow_postgres
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: airflow_db
+    volumes:
+      - ./airflow_postgres:/var/lib/postgresql/data
+    networks:
+      - network
+
+### WEBSERVER DO AIRFLOW
+  airflow_webserver:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_webserver
+    restart: always
+    ports:
+      - "8999:8080"
+    command: webserver
+    depends_on:
+      - airflow_postgres
+      - redis
+    networks:
+      - network
+
+### SCHEDULER DO AIRFLOW
+  airflow_scheduler:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow_webserver
+      - redis
+      - airflow_postgres
+    command: scheduler
+    networks:
+      - network
+
+### WORKER DO AIRFLOW
+  airflow_worker:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_worker
+    restart: always
+    depends_on:
+      - airflow_webserver
+      - redis
+      - airflow_postgres
+      - airflow_scheduler
+    command: celery worker
+    networks:
+      - network
+
+### TRIGGERER DO AIRFLOW
+  airflow_triggerer:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_triggerer
+    restart: always
+    depends_on:
+      - airflow_webserver
+      - redis
+      - airflow_postgres
+      - airflow_scheduler
+      - airflow_worker
+    command: triggerer
+    networks:
+      - network
+
+### INIT DO DB DO AIRFLOW
+### PODE FICAR DESLIGADO APOS RODAR A PRIMEIRA VEZ
+  airflow_init:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_init
+    depends_on:
+      - airflow_webserver
+      - redis
+      - airflow_postgres
+      - airflow_scheduler
+      - airflow_worker
+      - airflow_triggerer
+    command: db init
+    networks:
+      - network
+
+### CONTAINER DE CRIAÇÃO DE USUÁRIO DE ADMINISTRAÇÃO DO AIRFLOW
+### PODE FICAR DESLIGADO APOS RODAR A PRIMEIRA VEZ
+  airflow_create_user:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_create_user
+    depends_on:
+      - airflow_webserver
+      - redis
+      - airflow_postgres
+      - airflow_scheduler
+      - airflow_worker
+      - airflow_triggerer
+      - airflow_init
+    command: users create --username admin --password admin --firstname admin --lastname Admin --role Admin --email admin@airflow.com
+    networks:
+      - network
+
+###########################################################################################################################################################################################
+### BANCO DE DADOS GERAL 01 - Dados do ETL do BPF
+  general_database:
+    container_name: general_database
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: general_database
+    ports:
+      - 5455:5432
+    volumes:
+      - ./general_database:/var/lib/postgresql/data
+    networks:
+      - network
+
+###########################################################################################################################################################################################
+### BANCO DE DADOS POSTGRES DO SUPERSET
+  superset_postgres:
+    env_file: docker/env-nov-dev.txt
+    image: postgres:15
+    container_name: superset_postgres
+    restart: unless-stopped
+    volumes:
+      - db_home:/var/lib/postgresql/data
+      - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+
+### SUPERSET
+  superset:
+    env_file: docker/env-nov-dev.txt
+    image: *superset-image
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
+    restart: unless-stopped
+    ports:
+      - 7777:8088
+    depends_on: *superset-depends-on
+    volumes: *superset-volumes
+
+### INICIALIZAÇÃO DO SUPERSET
+  superset-init:
+    image: *superset-image
+    container_name: superset_init
+    command: ["/app/docker/docker-init.sh"]
+    env_file: docker/env-nov-dev.txt
+    depends_on: *superset-depends-on
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+
+### WORKER DO SUPERSET
+  superset-worker:
+    image: *superset-image
+    container_name: superset_worker
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
+    env_file: docker/env-nov-dev.txt
+    restart: unless-stopped
+    depends_on: *superset-depends-on
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
+        ]
+
+### WORKER BEAT DO SUPERSET
+  superset-worker-beat:
+    image: *superset-image
+    container_name: superset_worker_beat
+    command: ["/app/docker/docker-bootstrap.sh", "beat"]
+    env_file: docker/env-nov-dev.txt
+    restart: unless-stopped
+    depends_on: *superset-depends-on
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+
+###########################################################################################################################################################################################
+
+networks:
+  network:
+    name: network
+    driver: bridge
+
+volumes:
+  superset_home:
+    external: false
+  db_home:
+    external: false
+  redis:
+    external: false
