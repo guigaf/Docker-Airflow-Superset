@@ -32,15 +32,6 @@ x-airflow-common: &x-airflow-common
     - ./files:/files
     - ./internal_files:/internal_files
 
-x-superset-image: &superset-image apachesuperset.docker.scarf.sh/apache/superset:${TAG:-3.1.0}
-x-superset-depends-on: &superset-depends-on
-  - superset_postgres
-  - redis
-x-superset-volumes:
-  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
-  - ./docker:/app/docker
-  - superset_home:/app/superset_home
-
 services:
 ###########################################################################################################################################################################################
 ### REDIS - UTILIZADO PELO AIRFLOW E PELO SUPERSET
@@ -188,64 +179,52 @@ services:
     image: postgres:15
     container_name: superset_postgres
     restart: unless-stopped
-    volumes:
-      - db_home:/var/lib/postgresql/data
-      - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
-
-### SUPERSET
-  superset:
-    env_file: docker/env-nov-dev.txt
-    image: *superset-image
-    container_name: superset_app
-    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
-    user: "root"
-    restart: unless-stopped
     ports:
-      - 7777:8088
-    depends_on: *superset-depends-on
-    volumes: *superset-volumes
+      - 5555:5432
+    networks:
+      - network
+    # volumes:
+    #   - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
 
-### INICIALIZAÇÃO DO SUPERSET
-  superset-init:
-    image: *superset-image
+  superset_webserver:
+    image: df_superset_teste
+    container_name: superset_webserver
+    command: superset run -p 8088 --with-threads --reload --debugger --host=0.0.0.0
+    user: "root"
+    restart: always
+    ports:
+      - 7998:8088
+    depends_on:
+      - superset_postgres
+    networks:
+      - network
+
+  superset_db_upgrade:
+    image: df_superset_teste
+    container_name: superset_db_upgrade
+    command: superset db upgrade
+    depends_on:
+      - superset_postgres
+    networks:
+      - network
+
+  superset_init:
+    image: df_superset_teste
     container_name: superset_init
-    command: ["/app/docker/docker-init.sh"]
-    env_file: docker/env-nov-dev.txt
-    depends_on: *superset-depends-on
-    user: "root"
-    volumes: *superset-volumes
-    healthcheck:
-      disable: true
+    command: superset init
+    depends_on:
+      - superset_postgres
+    networks:
+      - network
 
-### WORKER DO SUPERSET
-  superset-worker:
-    image: *superset-image
-    container_name: superset_worker
-    command: ["/app/docker/docker-bootstrap.sh", "worker"]
-    env_file: docker/env-nov-dev.txt
-    restart: unless-stopped
-    depends_on: *superset-depends-on
-    user: "root"
-    volumes: *superset-volumes
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
-        ]
-
-### WORKER BEAT DO SUPERSET
-  superset-worker-beat:
-    image: *superset-image
-    container_name: superset_worker_beat
-    command: ["/app/docker/docker-bootstrap.sh", "beat"]
-    env_file: docker/env-nov-dev.txt
-    restart: unless-stopped
-    depends_on: *superset-depends-on
-    user: "root"
-    volumes: *superset-volumes
-    healthcheck:
-      disable: true
+  superset_create_user:
+    image: df_superset_teste
+    container_name: superset_create_user
+    command: superset fab create-admin --username admin --password admin --firstname Admin --lastname Admin --email admin@superset.com.br
+    depends_on:
+      - superset_postgres
+    networks:
+      - network
 
 ###########################################################################################################################################################################################
 
@@ -253,11 +232,3 @@ networks:
   network:
     name: network
     driver: bridge
-
-volumes:
-  superset_home:
-    external: false
-  db_home:
-    external: false
-  redis:
-    external: false
