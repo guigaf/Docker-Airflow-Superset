@@ -183,8 +183,6 @@ services:
       - 5555:5432
     networks:
       - network
-    # volumes:
-    #   - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
 
   superset_webserver:
     image: df_superset_teste
