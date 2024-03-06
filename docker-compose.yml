@@ -11,7 +11,7 @@ x-airflow-common: &x-airflow-common
     - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=1
     - AIRFLOW__CORE__TEST_CONNECTION=Enabled
     - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://admin:admin@airflow_postgres/airflow_db
-    - AIRFLOW__CELERY__BROKER_URL=redis://:admin@redis:6379/0
+    - AIRFLOW__CELERY__BROKER_URL=redis://:ps_admin@redis:6379/0
     - AIRFLOW__WEBSERVER__SECRET_KEY=admin
     - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
     - AIRFLOW__CORE__FERNET_KEY=IYKIlOJwcyUdZnLMG3rDdmFQF5QkI-lgT2P8dRx5IOo=
@@ -49,7 +49,7 @@ services:
 ### BANCO DE DADOS DO AIRFLOW
   airflow_postgres:
     container_name: airflow_postgres
-    image: postgres:15
+    image: postgres:13
     restart: always
     environment:
       POSTGRES_USER: admin
@@ -159,7 +159,7 @@ services:
 ### BANCO DE DADOS GERAL 01 - Dados do ETL do BPF
   general_database:
     container_name: general_database
-    image: postgres:15
+    image: postgres:13
     restart: always
     environment:
       POSTGRES_USER: admin
@@ -171,59 +171,6 @@ services:
       - ./general_database:/var/lib/postgresql/data
     networks:
       - network
-
-###########################################################################################################################################################################################
-### BANCO DE DADOS POSTGRES DO SUPERSET
-  superset_postgres:
-    env_file: docker/env-nov-dev.txt
-    image: postgres:15
-    container_name: superset_postgres
-    restart: unless-stopped
-    ports:
-      - 5555:5432
-    networks:
-      - network
-
-  superset_webserver:
-    image: df_superset_teste
-    container_name: superset_webserver
-    command: superset run -p 8088 --with-threads --reload --debugger --host=0.0.0.0
-    user: "root"
-    restart: always
-    ports:
-      - 7998:8088
-    depends_on:
-      - superset_postgres
-    networks:
-      - network
-
-  superset_db_upgrade:
-    image: df_superset_teste
-    container_name: superset_db_upgrade
-    command: superset db upgrade
-    depends_on:
-      - superset_postgres
-    networks:
-      - network
-
-  superset_init:
-    image: df_superset_teste
-    container_name: superset_init
-    command: superset init
-    depends_on:
-      - superset_postgres
-    networks:
-      - network
-
-  superset_create_user:
-    image: df_superset_teste
-    container_name: superset_create_user
-    command: superset fab create-admin --username admin --password admin --firstname Admin --lastname Admin --email admin@superset.com.br
-    depends_on:
-      - superset_postgres
-    networks:
-      - network
-
 ###########################################################################################################################################################################################
 
 networks:
