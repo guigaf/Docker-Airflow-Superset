@@ -1,0 +1,68 @@
+version: '3'
+services:
+###########################################################################################################################################################################################
+
+### No Docker-Desktop quando ocorrer algum problema e o superset nao estiver funcionando ele deve ser iniciado manualmente na seguinte ordem,
+### Primeiro  <-> Rodar o "superset_db_upgrade"
+### Segundo   <-> Rodar o "superset_init"
+### Terceiro  <-> Rodar o "superset_create_user"
+### Deve ser seguido exatamente essa ordem
+
+  superset_webserver:
+    image: df_superset_teste
+    container_name: superset_webserver
+    command: superset run -p 8088 --with-threads --reload --debugger --host=0.0.0.0
+    user: "root"
+    restart: always
+    ports:
+      - 7998:8088
+    networks:
+      - network
+
+  superset_db_upgrade:
+    image: df_superset_teste
+    container_name: superset_db_upgrade
+    depends_on:
+      - superset_webserver
+    # command: superset db upgrade
+    command: >
+      sh -c "./docker/wait-for-it.sh superset_webserver:8088 &&
+             superset db upgrade"
+    networks:
+      - network
+
+  superset_init:
+    image: df_superset_teste
+    container_name: superset_init
+    depends_on:
+      - superset_webserver
+      - superset_db_upgrade
+    # command: superset init
+    command: >
+      sh -c "./docker/wait-for-it.sh superset_webserver:8088 &&
+             ./docker/wait-for-it.sh superset_db_upgrade:5432 &&
+             superset init"
+    networks:
+      - network
+
+  superset_create_user:
+    image: df_superset_teste
+    container_name: superset_create_user
+    depends_on:
+      - superset_webserver
+      - superset_db_upgrade
+      - superset_init
+    # command: superset fab create-admin --username admin --password admin --firstname Admin --lastname Admin --email admin@superset.com.br
+    command: >
+      sh -c "./docker/wait-for-it.sh superset_webserver:8088 &&
+             ./docker/wait-for-it.sh superset_db_upgrade:5432 &&
+             ./docker/wait-for-it.sh superset_init:8088 &&
+             superset fab create-admin --username admin --password admin --firstname Admin --lastname Admin --email admin@superset.com.br"
+    networks:
+      - network
+###########################################################################################################################################################################################
+
+networks:
+  network:
+    name: network
+    driver: bridge

@@ -1,0 +1,123 @@
+version: '3'
+x-airflow-common: &x-airflow-common
+  environment:
+    - LOAD_EX=n
+    - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+    - AIRFLOW__LOGGING__MAX_LOG_DAYS=15
+    - AIRFLOW__LOGGING__DELETE_LOCAL_LOGS=True
+    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:admin@airflow_postgres/airflow_db
+    - AIRFLOW__CORE__PARALLELISM=5
+    - AIRFLOW__CORE__DAG_CONCURRENCY=5
+    - AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=1
+    - AIRFLOW__CORE__TEST_CONNECTION=Enabled
+    - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://admin:admin@airflow_postgres/airflow_db
+    - AIRFLOW__CELERY__BROKER_URL=redis://:ps_admin@redis:6379/0
+    - AIRFLOW__WEBSERVER__SECRET_KEY=admin
+    - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    - AIRFLOW__CORE__FERNET_KEY=IYKIlOJwcyUdZnLMG3rDdmFQF5QkI-lgT2P8dRx5IOo=
+    - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - AIRFLOW__API__AUTH_BACKEND=airflow.api.auth.backend.basic_auth
+    - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=5
+    - AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=20
+    - _PIP_ADDITIONAL_REQUIREMENTS=${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    - PYTHONPATH=/opt/airflow/common_modules:$PYTHONPATH
+  volumes:
+    - ./airflow/common:/opt/airflow/common_modules
+    - ./airflow/deactivated_dags:/opt/airflow/deactivated_dags
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/config:/opt/airflow/config
+    - ./files:/files
+    - ./internal_files:/internal_files
+
+services:
+###########################################################################################################################################################################################
+### WEBSERVER DO AIRFLOW
+  airflow_webserver:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_webserver
+    restart: always
+    ports:
+      - "8999:8080"
+    command: webserver
+    networks:
+      - network
+
+### SCHEDULER DO AIRFLOW
+  airflow_scheduler:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow_webserver
+    command: scheduler
+    networks:
+      - network
+
+### WORKER DO AIRFLOW
+  airflow_worker:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_worker
+    restart: always
+    depends_on:
+      - airflow_webserver
+      - airflow_scheduler
+    command: celery worker
+    networks:
+      - network
+
+### TRIGGERER DO AIRFLOW
+  airflow_triggerer:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_triggerer
+    restart: always
+    depends_on:
+      - airflow_webserver
+      - airflow_scheduler
+      - airflow_worker
+    command: triggerer
+    networks:
+      - network
+
+### INIT DO DB DO AIRFLOW
+### PODE FICAR DESLIGADO APOS RODAR A PRIMEIRA VEZ
+  airflow_init:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_init
+    depends_on:
+      - airflow_webserver
+      - airflow_scheduler
+      - airflow_worker
+      - airflow_triggerer
+    command: db init
+    networks:
+      - network
+
+### CONTAINER DE CRIAÇÃO DE USUÁRIO DE ADMINISTRAÇÃO DO AIRFLOW
+### PODE FICAR DESLIGADO APOS RODAR A PRIMEIRA VEZ
+  airflow_create_user:
+    image: df_airflow_teste
+    <<: *x-airflow-common
+    container_name: airflow_create_user
+    depends_on:
+      - airflow_webserver
+      - airflow_scheduler
+      - airflow_worker
+      - airflow_triggerer
+      - airflow_init
+    command: users create --username admin --password admin --firstname admin --lastname Admin --role Admin --email admin@airflow.com
+    networks:
+      - network
+###########################################################################################################################################################################################
+
+networks:
+  network:
+    name: network
+    driver: bridge
